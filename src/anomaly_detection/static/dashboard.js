@@ -7,6 +7,7 @@ const params = new URLSearchParams(location.search);
 const state = {
   data: null,
   context: params.get("context") || "",
+  chat: [],
   ns: params.get("ns") || "",
   severity: "",
   category: "",
@@ -32,6 +33,53 @@ const timeAgo = (iso) => {
   return `${Math.round(s / 86400)}d ago`;
 };
 const bar = (p, t = tone(p)) => `<div class="bar"><span class="${t}" style="width:${Math.min(100, p).toFixed(1)}%"></span></div>`;
+const HELP = {
+  cluster: ["Cluster", "Each entry is a kubeconfig context, or the in-cluster ServiceAccount when this page runs inside Kubernetes. Switching cluster reloads every block. Nothing here changes the cluster."],
+  namespace: ["Namespace filter", "Limits every table and finding to one namespace. Exclude system hides control-plane namespaces so application problems are easier to see. Clicking a namespace in the table sets this filter."],
+  health: ["Cluster health", "One score from 0 to 100 and a letter grade. Reliability weighs the most, then capacity, efficiency, security, and configuration. A critical reliability finding holds the grade at D or below, because users are already affected. The chips say whether metrics-server and the other APIs could be read."],
+  "category-reliability": ["Reliability", "Can the workloads serve traffic right now? NotReady nodes, crash loops, unavailable deployments, and pods stuck Pending live here. A low score means fix this before tuning cost or security."],
+  "category-capacity": ["Capacity", "Is there room for the next pod, rollout, or node loss? This uses requests as well as real usage, because the scheduler places pods by requests. A high request percentage with low usage still means new pods can sit Pending."],
+  "category-efficiency": ["Efficiency", "Are you reserving CPU and memory that nobody uses, or running without a request so the scheduler cannot plan? This is where idle reservations, missing requests, and unbounded CPU show up."],
+  "category-security": ["Security", "How far could one compromised container reach? Privileged pods, host access, and mutable image tags enlarge that blast radius. A finding here is a weakness, not proof of an intrusion."],
+  "category-configuration": ["Configuration", "Will the cluster behave predictably during a drain, a scale-up, or an upgrade? Missing probes, disruption budgets, broken autoscalers, and version skew live here."],
+  capacity: ["Usage vs requests vs limits", "Three different numbers are easy to mix up. Usage is what the process consumes now. Requests are what the scheduler reserves. Limits are the ceiling: CPU is throttled and memory is killed. A cluster can look idle in usage and still be full on requests."],
+  "capacity-cpu": ["CPU gauge", "The bar is current usage. The green marker is reserved requests and the blue marker is the limit ceiling. Limits past 100% mean pods can demand more CPU than the nodes have, so they throttle together under load."],
+  "capacity-memory": ["Memory gauge", "Read the request marker against allocatable, not only the usage bar. Requests near the end of the bar mean the scheduler treats the cluster as full. A pod that crosses its own memory limit is OOMKilled."],
+  "capacity-pods": ["Pod slots", "Nodes cap how many pods they will run, separate from CPU and memory. A high fraction means a rollout can fail even when CPU looks free. There is no request or limit for a pod count."],
+  vectors: ["Detection vectors", "Four questions the page tries to answer: is something able to break out, is something degrading, is an error repeating, and is spend about to jump? Watch means this snapshot already has a finding. The note under each card names the sensor this API view cannot replace."],
+  actions: ["Top actions", "The six findings worth doing first, ordered by severity and how many workloads they touch. Details jumps to the full finding, including the command to copy. Info-only notes stay out of this list unless the cluster is otherwise quiet."],
+  advisors: ["Advisors", "Three written recommendations from the same snapshot. Security is the posture to tighten. Upgrades is the version path and what to fix before a drain. Root cause groups related failures into one likely explanation and the next read-only checks."],
+  "advisor-security": ["Security advisor", "A short hardening list: admission policy, admin bindings, host mounts, and published services. Confirm each item; some, such as a backup tool, need broad access but should still not be cluster-admin."],
+  "advisor-upgrades": ["Upgrade advisor", "Where this Kubernetes version sits in the upstream support window, the patch you are behind, and the drains that are unsafe today. Provider calendars differ, so confirm the target version is offered before scheduling it."],
+  "advisor-rca": ["Root cause", "Built only when signals agree: a crash, a probe failure, a secret sync, a scheduling refusal, or a load balancer error. Confidence says how directly the evidence supports the cause. Run the checks before changing anything."],
+  intelligence: ["AI investigation and early warnings", "Early warnings are calculated here from capacity and from the slope across refreshes. They do not call a model. Generate investigation sends a redacted summary to your configured API and asks for a hypothesis with evidence. A normal refresh does not spend tokens."],
+  chat: ["Ask about this cluster", "Type a question about the cluster currently selected. A pod name, CPU, memory, or node status is read from this snapshot. An open question, such as why something failed, is sent to your configured AI provider with only the matching facts. The assistant cannot change the cluster or run kubectl."],
+  insights: ["Insights", "Every check that fired, with impact, what to change, a command or snippet, and the affected objects. Filter by severity or category, or search a namespace. Open a row rather than treating the title as the whole finding."],
+  nodes: ["Nodes", "One row per machine. Compare used with requested: used is the live process, requested is the reservation. A node can be under 30% used and still be unschedulable because requests are full. Pressure means the kubelet will start evicting pods."],
+  namespaces: ["Namespaces", "Which namespace would hurt users if you ignore it. Health falls as critical and warning findings accumulate. Click the name to filter the rest of the page. System namespaces are marked so platform noise is visible but separate."],
+  pods: ["Top pods by memory", "The largest memory consumers, not every pod. The bar is usage against the memory limit. No limit means the bar cannot show a ceiling, and the pod can grow until the node evicts something. QoS BestEffort has no requests, so it is evicted first."],
+  events: ["Warning events", "Kubernetes warning events, one row per object and reason. Count is how many times it fired. Chronic means it started more than a day ago and is still firing, so it is not a blip from the last deploy."],
+  baseline: ["Baseline anomalies", "Optional time-series check against Prometheus, Cortex, Mimir, or Thanos. A high score means the service left its own recent normal range, even if it is under a static threshold. It stays empty until PROMETHEUS_URL or MIMIR_URL is set."],
+  "vector-security_runtime": ["Security and runtime", "Looks for privilege, new admin identities, and namespaces with no NetworkPolicy. A hit means the blast radius is large or egress is unrestricted. Syscall exploits and the exact external IP a pod contacted need Falco, Tetragon, or flow logs."],
+  "vector-performance": ["Performance and infrastructure", "Looks for crashes, restarts, hot nodes, and autoscalers that cannot add pods. A memory leak is only called out after several refreshes show a rising slope. Transaction drops need application metrics from Prometheus."],
+  "vector-logs": ["Log and event patterns", "Groups the same warning text so a dependency failure is not mistaken for harmless noise. Count at least 100 repetitions. Similar lines inside application logs need Loki or your log store."],
+  "vector-cost": ["Cost and capacity waste", "Looks for idle reservations, CPU with no ceiling, nodes added in the last few hours, and batch jobs with no deadline. These are the in-cluster signs of a surprise bill. The cloud invoice is not read."],
+  "col-cpu-used": ["CPU used / requested", "Used is live consumption divided by allocatable. Requested is what pods have reserved. Sort here to find the node most likely to throttle or to reject new pods."],
+  "col-mem-used": ["Memory used / requested", "Same split as CPU. Requested near 100% is a scheduling problem. Used near 100% is an eviction problem."],
+  "col-allocatable": ["Allocatable", "CPU and memory the kubelet will actually give pods, after system reserves. Compare requests and usage with this, not with the cloud VM size."],
+  "col-pods": ["Pod slots on the node", "Running pods over the node maximum. This fills up before CPU on clusters with many small pods."],
+  "col-kubelet": ["Kubelet version", "The Kubernetes version on that node. Mixed versions during an upgrade are expected briefly. A node several minors behind the control plane is not."],
+  "col-health": ["Namespace health", "100 minus the findings in that namespace. A namespace at 40 needs attention even if the cluster grade looks acceptable."],
+  "col-cwi": ["Critical / warning / info", "How many findings name this namespace. Critical counts affect users now. Info is hygiene."],
+  "col-mem-bar": ["Memory bar", "The bar is how close usage is to the limit. The text underneath is usage, request, and limit. Usage far above the request means the scheduler is reserving too little."],
+  "col-qos": ["Quality of service", "Guaranteed has equal requests and limits. Burstable has a request. BestEffort has neither and is the first pod evicted when a node is under pressure."],
+  "col-count": ["Event count", "Times Kubernetes recorded this reason for this object. A large count is one repeating problem, not thousands of unrelated problems."],
+  "col-chronic": ["First seen", "When this warning started. A first-seen time of many hours or days, with a recent last-seen time, is marked Chronic."],
+};
+function helpBtn(key) {
+  const [title] = HELP[key] || ["Help"];
+  return `<button type="button" class="help" data-help="${esc(key)}" aria-label="Help: ${esc(title)}">?</button>`;
+}
 
 function toast(msg) {
   const el = $("toast");
@@ -143,6 +191,7 @@ function render() {
   renderNamespaceOptions(report.namespaces);
   renderScores(report);
   renderCapacity(report.capacity, meta.metrics_available);
+  renderVectors(report.vectors);
   renderQuickWins(report.quick_wins);
   renderAdvisors(report.advisors);
   renderIntelligence(state.data.intelligence);
@@ -152,6 +201,10 @@ function render() {
   renderPods(report.top_pods);
   renderEvents(report.events, meta.window_hours);
   renderBaseline(state.data.baseline);
+  const ai = state.data.intelligence?.status;
+  $("chat-status").textContent = ai?.enabled
+    ? `Snapshot answers are instant. Open questions use ${ai.provider} / ${ai.model}.`
+    : "Pod CPU, memory, and node status come from this snapshot. Open questions need an AI provider.";
 }
 
 function renderNamespaceOptions(rows) {
@@ -184,12 +237,12 @@ function renderScores(report) {
 
   $("category-tiles").innerHTML = CATEGORIES.map((name) => {
     const c = scores.categories[name];
-    return `<button class="tile ${state.category === name ? "active" : ""}" data-category="${name}" type="button">
+    return `<div class="tile-wrap">${helpBtn(`category-${name}`)}<button class="tile ${state.category === name ? "active" : ""}" data-category="${name}" type="button">
       <span class="label">${name}</span>
       <span class="tile-score" style="color:${scoreTone(c.score)}">${c.score}</span>
       <div class="bar"><span style="width:${c.score}%;background:${scoreTone(c.score)}"></span></div>
       <span class="tile-counts"><span class="t-critical">${c.critical} crit</span><span class="t-warning">${c.warning} warn</span><span class="t-info">${c.info} info</span></span>
-    </button>`;
+    </button></div>`;
   }).join("");
 }
 
@@ -214,13 +267,13 @@ function gauge(values, fmt, unit) {
 }
 
 function renderCapacity(cap, metrics) {
-  const card = (title, headline, body) =>
-    `<div class="cap"><div class="cap-head"><span class="label">${title}</span><strong>${headline}</strong></div>${body}</div>`;
+  const card = (title, help, headline, body) =>
+    `<div class="cap"><div class="cap-head"><span class="label">${title} ${helpBtn(help)}</span><strong>${headline}</strong></div>${body}</div>`;
   $("capacity").innerHTML = [
-    card("CPU", metrics ? `${pct(cap.cpu.usage, cap.cpu.allocatable).toFixed(0)}% used` : "no metrics", gauge(cap.cpu, cpu, "cores")),
-    card("Memory", metrics ? `${pct(cap.memory.usage, cap.memory.allocatable).toFixed(0)}% used` : "no metrics",
+    card("CPU", "capacity-cpu", metrics ? `${pct(cap.cpu.usage, cap.cpu.allocatable).toFixed(0)}% used` : "no metrics", gauge(cap.cpu, cpu, "cores")),
+    card("Memory", "capacity-memory", metrics ? `${pct(cap.memory.usage, cap.memory.allocatable).toFixed(0)}% used` : "no metrics",
       gauge(cap.memory, (v) => (v == null ? "–" : (v / GIB).toFixed(1)), "GiB")),
-    card("Pods", `${cap.pods.usage}/${cap.pods.allocatable}`,
+    card("Pods", "capacity-pods", `${cap.pods.usage}/${cap.pods.allocatable}`,
       gauge({ usage: cap.pods.usage, requests: null, limits: null, allocatable: cap.pods.allocatable }, (v) => v ?? "–", "")),
   ].join("");
   $("capacity-notes").innerHTML = (cap.notes || []).map((n) => `<li>${esc(n)}</li>`).join("");
@@ -229,6 +282,17 @@ function renderCapacity(cap, metrics) {
 function fixBlock(fix) {
   if (!fix) return "";
   return `<pre class="fix"><button class="ghost copy" type="button" data-copy="${esc(fix)}">Copy</button>${esc(fix)}</pre>`;
+}
+
+function renderVectors(vectors) {
+  $("vectors").innerHTML = (vectors || []).map((vector) => `
+    <article class="vector ${vector.status}">
+      <p class="label">${esc(vector.status)} ${helpBtn(`vector-${vector.id}`)}</p>
+      <h3>${esc(vector.title)}</h3>
+      <p>${esc(vector.detects)}</p>
+      <ul>${(vector.findings || []).map((item) => `<li><button class="jump link" type="button" data-jump="${esc(item.id)}">${esc(item.title)}</button></li>`).join("") || "<li>No active finding in this snapshot.</li>"}</ul>
+      <p class="muted">${(vector.blind_spots || []).map(esc).join(" ")}</p>
+    </article>`).join("");
 }
 
 function renderQuickWins(wins) {
@@ -270,9 +334,9 @@ function renderAdvisors(advisors) {
       </article>`).join("")
     : `<div class="empty">No incident pattern is active. A note appears here when pods crash, images fail to pull, or nodes come under pressure.</div>`;
   $("advisor-grid").innerHTML = [
-    `<article class="advisor"><p class="label">Security · ${esc(security.posture || "")}</p><h3>${esc(security.summary || "")}</h3>${securityBody}</article>`,
-    `<article class="advisor"><p class="label">Upgrades · ${esc(upgrades.status || "")}${upgrades.provider ? ` · ${esc(upgrades.provider)}` : ""}</p><h3>${esc(upgrades.headline || "")}</h3>${upgrades.skew_summary ? `<p class="muted">${esc(upgrades.skew_summary)}</p>` : ""}${upgradeBody}</article>`,
-    `<article class="advisor"><p class="label">Root cause</p><h3>${cases.length ? `${cases.length} investigation${cases.length > 1 ? "s" : ""}` : "No active incident"}</h3>${caseBody}</article>`,
+    `<article class="advisor"><p class="label">Security · ${esc(security.posture || "")} ${helpBtn("advisor-security")}</p><h3>${esc(security.summary || "")}</h3>${securityBody}</article>`,
+    `<article class="advisor"><p class="label">Upgrades · ${esc(upgrades.status || "")}${upgrades.provider ? ` · ${esc(upgrades.provider)}` : ""} ${helpBtn("advisor-upgrades")}</p><h3>${esc(upgrades.headline || "")}</h3>${upgrades.skew_summary ? `<p class="muted">${esc(upgrades.skew_summary)}</p>` : ""}${upgradeBody}</article>`,
+    `<article class="advisor"><p class="label">Root cause ${helpBtn("advisor-rca")}</p><h3>${cases.length ? `${cases.length} investigation${cases.length > 1 ? "s" : ""}` : "No active incident"}</h3>${caseBody}</article>`,
   ].join("");
 }
 
@@ -354,7 +418,8 @@ function table(id, columns, rows, defaultSort) {
   }) : rows;
   const head = columns.map((c) => {
     const arrow = s.key === c.key ? (s.dir === "asc" ? " ▲" : " ▼") : "";
-    return `<th class="${c.num ? "num" : ""} ${c.sort ? "sortable" : ""}" data-table="${id}" data-key="${c.key}">${c.label}${arrow}</th>`;
+    const help = c.help ? helpBtn(c.help) : "";
+    return `<th class="${c.num ? "num" : ""} ${c.sort ? "sortable" : ""}" data-table="${id}" data-key="${c.key}">${c.label}${help}${arrow}</th>`;
   }).join("");
   const body = sorted.length
     ? sorted.map((r) => `<tr>${columns.map((c) => `<td class="${c.num ? "num" : ""} ${c.wrap ? "wrap" : ""}">${c.render(r)}</td>`).join("")}</tr>`).join("")
@@ -379,15 +444,15 @@ function renderNodes(nodes) {
       `<strong>${esc(n.name)}</strong><br><small class="muted">${esc([n.pool, n.instance_type, n.zone].filter(Boolean).join(" · "))}</small>` },
     { key: "status", label: "Status", sort: (n) => (n.ready ? 1 : 0), render: (n) =>
       `${n.ready ? `<span class="t-ok">Ready</span>` : `<span class="t-critical">NotReady</span>`}${n.unschedulable ? ` <span class="tag">cordoned</span>` : ""}${n.pressure.map((p) => ` <span class="sev critical">${esc(p)}</span>`).join("")}` },
-    { key: "cpu", label: "CPU used / requested", sort: (n) => cpuUse(n) ?? -1, render: (n) =>
+    { key: "cpu", label: "CPU used / requested", help: "col-cpu-used", sort: (n) => cpuUse(n) ?? -1, render: (n) =>
       dual("used", cpuUse(n), "req", pct(n.requests.cpu, n.allocatable.cpu)) },
-    { key: "mem", label: "Memory used / requested", sort: (n) => memUse(n) ?? -1, render: (n) =>
+    { key: "mem", label: "Memory used / requested", help: "col-mem-used", sort: (n) => memUse(n) ?? -1, render: (n) =>
       dual("used", memUse(n), "req", pct(n.requests.memory, n.allocatable.memory)) },
-    { key: "alloc", label: "Allocatable", num: true, sort: (n) => n.allocatable.memory, render: (n) =>
+    { key: "alloc", label: "Allocatable", help: "col-allocatable", num: true, sort: (n) => n.allocatable.memory, render: (n) =>
       `${cpu(n.allocatable.cpu)} cpu<br><small class="muted">${bytes(n.allocatable.memory)}</small>` },
-    { key: "pods", label: "Pods", num: true, sort: (n) => pct(n.pods, n.pod_capacity), render: (n) =>
+    { key: "pods", label: "Pods", help: "col-pods", num: true, sort: (n) => pct(n.pods, n.pod_capacity), render: (n) =>
       `<span class="pill ${tone(pct(n.pods, n.pod_capacity), 80, 90)}">${n.pods}/${n.pod_capacity}</span>` },
-    { key: "kubelet", label: "Kubelet", sort: (n) => n.kubelet, render: (n) => esc(n.kubelet) },
+    { key: "kubelet", label: "Kubelet", help: "col-kubelet", sort: (n) => n.kubelet, render: (n) => esc(n.kubelet) },
     { key: "age", label: "Age", render: (n) => esc(n.age) },
   ], nodes, { key: "mem", dir: "desc" });
 }
@@ -398,9 +463,9 @@ function renderNamespaces(rows) {
   table("namespaces-table", [
     { key: "namespace", label: "Namespace", sort: (r) => r.namespace, render: (r) =>
       `<button class="ghost ns-link" type="button" data-ns="${esc(r.namespace)}" style="padding:2px 6px">${esc(r.namespace)}</button>${r.system ? ` <span class="tag">system</span>` : ""}` },
-    { key: "score", label: "Health", num: true, sort: (r) => r.score, render: (r) =>
+    { key: "score", label: "Health", help: "col-health", num: true, sort: (r) => r.score, render: (r) =>
       `<span class="pill ${r.score < 60 ? "crit" : r.score < 85 ? "warn" : ""}">${r.score}</span>` },
-    { key: "issues", label: "C / W / I", num: true, sort: (r) => r.critical * 100 + r.warning * 10 + r.info, render: (r) =>
+    { key: "issues", label: "C / W / I", help: "col-cwi", num: true, sort: (r) => r.critical * 100 + r.warning * 10 + r.info, render: (r) =>
       `<span class="t-critical">${r.critical}</span> / <span class="t-warning">${r.warning}</span> / <span class="t-info">${r.info}</span>` },
     { key: "pods", label: "Pods", num: true, sort: (r) => r.pods, render: (r) =>
       `${r.pods}${r.not_ready ? ` <span class="t-critical">(${r.not_ready} ✕)</span>` : ""}` },
@@ -426,10 +491,10 @@ function renderPods(pods) {
   table("pods-table", [
     { key: "pod", label: "Pod", sort: (p) => `${p.namespace}/${p.name}`, render: (p) =>
       `<span class="ellipsis" title="${esc(`${p.namespace}/${p.name}`)}">${esc(p.name)}</span><br><small class="muted">${esc(p.namespace)}</small>` },
-    { key: "mem", label: "Memory (bar = % of limit)", sort: (p) => p.usage.memory, render: memCell },
+    { key: "mem", label: "Memory (bar = % of limit)", help: "col-mem-bar", sort: (p) => p.usage.memory, render: memCell },
     { key: "cpu", label: "CPU", num: true, sort: (p) => p.usage.cpu, render: (p) =>
       `${cpu(p.usage.cpu)}<br><small class="muted">req ${p.requests.cpu ? cpu(p.requests.cpu) : "none"}</small>` },
-    { key: "qos", label: "QoS", sort: (p) => p.qos, render: (p) =>
+    { key: "qos", label: "QoS", help: "col-qos", sort: (p) => p.qos, render: (p) =>
       `<span class="tag" style="${p.qos === "BestEffort" ? "color:var(--warning)" : ""}">${esc(p.qos)}</span>` },
     { key: "restarts", label: "Restarts", num: true, sort: (p) => p.restarts, render: (p) => p.restarts },
   ], data, { key: "mem", dir: "desc" });
@@ -447,8 +512,8 @@ function renderEvents(events, windowHours) {
     { key: "object", label: "Object", sort: (e) => `${e.namespace}/${e.resource}`, render: (e) =>
       `<span class="ellipsis" title="${esc(`${e.namespace}/${e.resource}`)}">${esc(`${e.kind}/${e.resource}`)}</span><br><small class="muted">${esc(e.namespace)}</small>` },
     { key: "message", label: "Message", wrap: true, render: (e) => `<span class="muted">${esc(e.message.slice(0, 300))}</span>` },
-    { key: "count", label: "Count", num: true, sort: (e) => e.count, render: (e) => e.count.toLocaleString() },
-    { key: "first", label: "First seen", num: true, sort: (e) => e.first_seen || "", render: (e) => timeAgo(e.first_seen) },
+    { key: "count", label: "Count", help: "col-count", num: true, sort: (e) => e.count, render: (e) => e.count.toLocaleString() },
+    { key: "first", label: "First seen", help: "col-chronic", num: true, sort: (e) => e.first_seen || "", render: (e) => timeAgo(e.first_seen) },
     { key: "last", label: "Last seen", num: true, sort: (e) => e.last_seen, render: (e) => timeAgo(e.last_seen) },
   ], data, { key: "last", dir: "desc" });
 }
@@ -467,7 +532,40 @@ function renderBaseline(baseline) {
 
 // ------------------------------------------------------------------ events
 
+function hideHelp() {
+  $("help-pop").classList.add("hidden");
+  document.querySelectorAll(".help[aria-expanded='true']").forEach((button) => button.setAttribute("aria-expanded", "false"));
+}
+
+function showHelp(button) {
+  const entry = HELP[button.dataset.help];
+  if (!entry) return;
+  const pop = $("help-pop");
+  const reopen = button.getAttribute("aria-expanded") === "true";
+  hideHelp();
+  if (reopen) return;
+  $("help-pop-title").textContent = entry[0];
+  $("help-pop-body").textContent = entry[1];
+  pop.classList.remove("hidden");
+  const rect = button.getBoundingClientRect();
+  const width = pop.offsetWidth;
+  const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+  const below = rect.bottom + 8;
+  const top = below + pop.offsetHeight > window.innerHeight - 8 ? Math.max(8, rect.top - pop.offsetHeight - 8) : below;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  button.setAttribute("aria-expanded", "true");
+}
+
 document.addEventListener("click", async (ev) => {
+  const help = ev.target.closest(".help");
+  if (help) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    showHelp(help);
+    return;
+  }
+  if (!ev.target.closest("#help-pop")) hideHelp();
   const t = ev.target.closest("button, th, a");
   if (!t) {
     $("export-menu").classList.add("hidden");
@@ -529,7 +627,14 @@ $("severity-filters").addEventListener("click", (ev) => {
 $("category-filter").addEventListener("change", (e) => { state.category = e.target.value; renderScores(state.data.cluster); renderInsights(); });
 $("search").addEventListener("input", (e) => { state.query = e.target.value; renderInsights(); });
 $("namespace-select").addEventListener("change", (e) => { state.ns = e.target.value; syncUrl(); render(); });
-$("context-select").addEventListener("change", (e) => { state.context = e.target.value; state.ns = ""; state.open.clear(); load(); });
+$("context-select").addEventListener("change", (e) => {
+  state.context = e.target.value;
+  state.ns = "";
+  state.open.clear();
+  state.chat = [];
+  renderChat();
+  load();
+});
 $("refresh").addEventListener("click", () => load(true));
 $("evaluate").addEventListener("click", async () => {
   const b = $("evaluate");
@@ -560,6 +665,84 @@ function schedule() {
   if ($("auto-refresh").checked) state.timer = setInterval(() => load(), 60_000);
 }
 $("auto-refresh").addEventListener("change", schedule);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  if (!$("help-pop").classList.contains("hidden")) {
+    hideHelp();
+    return;
+  }
+  closeChat();
+});
+
+function renderChat() {
+  const log = $("chat-log");
+  log.innerHTML = state.chat.map((turn) => {
+    const meta = turn.meta ? `<span class="meta">${esc(turn.meta)}</span>` : "";
+    return `<div class="chat-msg ${turn.role}">${esc(turn.content)}${meta}</div>`;
+  }).join("");
+  log.scrollTop = log.scrollHeight;
+  $("chat-suggestions").classList.toggle("hidden", state.chat.length > 0);
+}
+
+function openChat() {
+  $("chat-panel").classList.remove("hidden");
+  $("chat-open").classList.add("hidden");
+  $("chat-input").focus();
+}
+
+function closeChat() {
+  $("chat-panel").classList.add("hidden");
+  $("chat-open").classList.remove("hidden");
+}
+
+async function sendChat(question) {
+  const text = question.trim();
+  if (!text || $("chat-send").disabled) return;
+  state.chat.push({ role: "user", content: text });
+  renderChat();
+  $("chat-input").value = "";
+  $("chat-send").disabled = true;
+  try {
+    const history = state.chat.slice(0, -1).slice(-8).map((turn) => ({ role: turn.role, content: turn.content }));
+    const q = new URLSearchParams({ context: state.context });
+    const res = await fetch(`/v1/chat?${q}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: text, history }),
+    });
+    const reply = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof reply.detail === "string" ? reply.detail : `${res.status} ${res.statusText}`);
+    const bits = [];
+    if (reply.grounded === "snapshot") bits.push("From this snapshot");
+    else if (reply.provider) bits.push(`${reply.provider} / ${reply.model}`);
+    if (reply.sources?.length) bits.push(reply.sources.join(", "));
+    if (reply.unknown) bits.push(reply.unknown);
+    state.chat.push({ role: "assistant", content: reply.answer, meta: bits.join(" · ") });
+  } catch (err) {
+    let detail = err.message;
+    state.chat.push({ role: "assistant", content: detail, meta: "Request failed" });
+  } finally {
+    $("chat-send").disabled = false;
+    renderChat();
+  }
+}
+
+$("chat-open").addEventListener("click", openChat);
+$("chat-close").addEventListener("click", closeChat);
+$("chat-suggestions").addEventListener("click", (ev) => {
+  const button = ev.target.closest("button");
+  if (button?.dataset.question) sendChat(button.dataset.question);
+});
+$("chat-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  sendChat($("chat-input").value);
+});
+$("chat-input").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey) {
+    ev.preventDefault();
+    sendChat($("chat-input").value);
+  }
+});
 
 (async () => {
   $("insights").innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;

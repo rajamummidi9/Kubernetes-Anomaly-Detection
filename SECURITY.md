@@ -32,10 +32,11 @@ internals.
 
 The optional intelligence layer sends a compact report to the configured model
 provider: scores, resource totals, finding text, warning events, deterministic
-investigations, and forecasts. It does not send Kubernetes Secret objects,
-environment variables, a kubeconfig, or raw pod specs. Secret-like fields,
-authorization headers, JWTs, and private-key blocks are redacted and the payload
-is size-limited.
+investigations, and forecasts. The Ask chat sends the question plus a smaller
+slice: matching pod and node metrics, related warning events, and findings.
+It does not send Kubernetes Secret objects, environment variables, a kubeconfig,
+or raw pod specs. Secret-like fields, authorization headers, JWTs, and
+private-key blocks are redacted and the payload is size-limited.
 
 Kubernetes object names and event messages are treated as untrusted prompt
 content. The model has no tools and cannot call Kubernetes. Its JSON response is

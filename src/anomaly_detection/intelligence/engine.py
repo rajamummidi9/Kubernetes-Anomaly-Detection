@@ -7,6 +7,7 @@ from anomaly_detection.config import Settings
 from anomaly_detection.intelligence.alerts import AlertDispatcher
 from anomaly_detection.intelligence.forecast import ReportHistory
 from anomaly_detection.intelligence.models import IntelligenceResult
+from anomaly_detection.intelligence.providers import ProviderError
 from anomaly_detection.intelligence.service import IntelligenceService
 
 
@@ -45,6 +46,43 @@ class IntelligenceEngine:
             "result": result.model_dump(mode="json"),
             "notifications_sent": sent,
         }
+
+    async def chat(self, report: dict[str, Any], question: str, history: list[dict[str, Any]]) -> dict[str, Any]:
+        from anomaly_detection.intelligence.chat import (
+            CHAT_SYSTEM,
+            OPEN_QUESTION,
+            chat_facts,
+            direct_answer,
+            finalize_model_reply,
+            normalize_history,
+            prompt_for,
+        )
+
+        self.observe(report)
+        question = question.strip()
+        turns = normalize_history(history)
+        if not OPEN_QUESTION.search(question):
+            direct = direct_answer(report, question)
+            if direct:
+                return direct
+        if not self.service.enabled:
+            direct = direct_answer(report, question)
+            if direct:
+                return direct
+            raise ProviderError(
+                "AI provider is not configured. Named pod CPU and memory, and node status, "
+                "are answered from the snapshot. This question needs AI_PROVIDER and AI_MODEL."
+            )
+        context = str((report.get("meta") or {}).get("context") or "unknown")
+        facts = chat_facts(report, question, self.predictions(context), self.settings.ai_max_input_chars)
+        raw = await self.service.complete(CHAT_SYSTEM, prompt_for(question, facts, turns))
+        return finalize_model_reply(
+            raw,
+            facts,
+            provider=self.settings.ai_provider,
+            model=self.settings.ai_model,
+            snapshot_at=str((report.get("meta") or {}).get("generated_at") or ""),
+        )
 
     def snapshot(self, report: dict[str, Any]) -> dict[str, Any]:
         self.observe(report)

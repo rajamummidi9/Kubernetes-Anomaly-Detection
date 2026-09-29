@@ -29,6 +29,9 @@ class ClusterSnapshot:
     services: list[Any] = field(default_factory=list)
     ingresses: list[Any] = field(default_factory=list)
     cluster_role_bindings: list[Any] = field(default_factory=list)
+    network_policies: list[Any] = field(default_factory=list)
+    jobs: list[Any] = field(default_factory=list)
+    cronjobs: list[Any] = field(default_factory=list)
     node_metrics: list[dict] = field(default_factory=list)
     pod_metrics: list[dict] = field(default_factory=list)
     # resource name -> "ok" | "forbidden" | "unavailable" | "error: ..."
@@ -69,6 +72,7 @@ def fetch_snapshot(api: client.ApiClient, context: str) -> ClusterSnapshot:
     custom = client.CustomObjectsApi(api)
     networking = client.NetworkingV1Api(api)
     rbac = client.RbacAuthorizationV1Api(api)
+    batch = client.BatchV1Api(api)
 
     def metrics(plural: str) -> list[dict]:
         result = custom.list_cluster_custom_object(
@@ -89,6 +93,9 @@ def fetch_snapshot(api: client.ApiClient, context: str) -> ClusterSnapshot:
         "services": lambda: _paged(core.list_service_for_all_namespaces),
         "ingresses": lambda: _paged(networking.list_ingress_for_all_namespaces),
         "cluster_role_bindings": lambda: _paged(rbac.list_cluster_role_binding),
+        "network_policies": lambda: _paged(networking.list_network_policy_for_all_namespaces),
+        "jobs": lambda: _paged(batch.list_job_for_all_namespaces),
+        "cronjobs": lambda: _paged(batch.list_cron_job_for_all_namespaces),
         "node_metrics": lambda: metrics("nodes"),
         "pod_metrics": lambda: metrics("pods"),
     }

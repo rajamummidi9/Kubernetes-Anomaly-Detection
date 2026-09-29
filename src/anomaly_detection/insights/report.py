@@ -11,6 +11,7 @@ from anomaly_detection.config import Settings
 from anomaly_detection.insights.index import ClusterIndex, Resources
 from anomaly_detection.insights.model import SEVERITY_RANK, Category, Insight
 from anomaly_detection.insights.rules import RULES, Thresholds, age, cores, event_rows, gib, pct
+from anomaly_detection.insights.vectors import build_vectors
 from anomaly_detection.k8s.client import KubeClientFactory
 from anomaly_detection.k8s.snapshot import ClusterSnapshot, fetch_snapshot
 
@@ -76,10 +77,12 @@ def build_report(snapshot: ClusterSnapshot, settings: Settings) -> dict[str, Any
         "capacity": _capacity(idx),
         "quick_wins": _quick_wins(insights),
         "advisors": build_advisors(snapshot, insights, settings.system_namespace_set),
+        "vectors": build_vectors(insights, settings),
         "insights": [i.to_dict() for i in insights],
         "nodes": _nodes(idx),
         "namespaces": _namespaces(idx, insights),
         "top_pods": _top_pods(idx),
+        "pod_catalog": _pod_catalog(idx),
         "events": event_rows(idx, thresholds)[:100],
     }
 
@@ -234,6 +237,33 @@ def _top_pods(idx: ClusterIndex, limit: int = 25) -> list[dict[str, Any]]:
         "usage": _res(p.usage), "requests": _res(p.requests), "limits": _res(p.limits),
         "qos": p.pod.status.qos_class or "",
     } for p in measured[:limit]]
+
+
+def _pod_catalog(idx: ClusterIndex) -> list[dict[str, Any]]:
+    """Compact live resources for every active pod, so chat can answer by name."""
+    rows = []
+    for p in idx.active_pods:
+        usage = p.usage
+        rows.append({
+            "namespace": p.namespace,
+            "name": p.name,
+            "workload": f"{p.workload_kind}/{p.workload_name}",
+            "node": p.node,
+            "phase": p.phase,
+            "ready": p.ready,
+            "restarts": p.restarts,
+            "cpu_cores": {
+                "used": None if usage is None else round(usage.cpu, 3),
+                "requested": round(p.requests.cpu, 3),
+                "limit": round(p.limits.cpu, 3) or None,
+            },
+            "memory_mib": {
+                "used": None if usage is None else round(usage.memory / (1024 ** 2)),
+                "requested": round(p.requests.memory / (1024 ** 2)),
+                "limit": round(p.limits.memory / (1024 ** 2)) or None,
+            },
+        })
+    return rows
 
 
 def to_markdown(report: dict[str, Any]) -> str:

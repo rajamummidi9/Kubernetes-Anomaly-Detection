@@ -79,6 +79,11 @@ def evidence_bundle(report: dict[str, Any], predictions: list[dict[str, Any]], m
         "findings": (report.get("insights") or [])[:35],
         "warning_events": (report.get("events") or [])[:35],
         "deterministic_investigations": ((report.get("advisors") or {}).get("investigations") or [])[:8],
+        "detection_vectors": [
+            {"id": item.get("id"), "status": item.get("status"), "findings": item.get("findings"),
+             "blind_spots": item.get("blind_spots")}
+            for item in (report.get("vectors") or [])
+        ],
         "predictions": predictions[:12],
     }
     text = json.dumps(redact(compact), separators=(",", ":"), ensure_ascii=False)
@@ -162,6 +167,18 @@ class IntelligenceService:
         self._latest[context] = result.model_copy(deep=True)
         self._cache[digest] = (time.monotonic(), result.model_copy(deep=True))
         return result
+
+    async def complete(self, system: str, user: str) -> str:
+        if not self.enabled:
+            raise ProviderError(self.status().status)
+        provider = make_provider(self.settings, self.client)
+        try:
+            raw = await provider.complete(system, user)
+        except ProviderError as exc:
+            self.last_error = str(exc)[:500]
+            raise
+        self.last_error = ""
+        return raw
 
     async def aclose(self) -> None:
         await self.client.aclose()

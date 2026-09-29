@@ -828,10 +828,144 @@ def platform(idx: ClusterIndex, t: Thresholds) -> list[Insight]:
     return out
 
 
+def runtime_and_cost(idx: ClusterIndex, t: Thresholds) -> list[Insight]:
+    """Signals for egress control, repeating failures, compute spikes, and job cost."""
+    snap = idx.snapshot
+    out: list[Insight] = []
+    if snap.coverage.get("network_policies") == "ok":
+        covered = {item.metadata.namespace for item in snap.network_policies}
+        exposed = sorted({
+            pod.namespace for pod in idx.workload_pods if pod.namespace not in covered
+        })
+        if exposed:
+            out.append(Insight(
+                "open-egress", Category.security, "warning",
+                f"{len(exposed)} namespace(s) have workloads and no NetworkPolicy",
+                "Nothing in these namespaces restricts pod egress or ingress.",
+                "A compromised pod can open connections to any external address, and that flow is invisible to the Kubernetes API.",
+                "Add a default-deny policy, then allow only the egress the workload needs. Use Hubble, Cilium, or VPC flow logs to see the actual destinations.",
+                "kubectl -n <namespace> apply -f - <<'EOF'\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: default-deny-egress\nspec:\n  podSelector: {}\n  policyTypes: [Egress]\nEOF",
+                [Affected(ns, "namespace", "no NetworkPolicy", "Namespace") for ns in exposed[:50]],
+            ))
+    if snap.coverage.get("cluster_role_bindings") == "ok":
+        fresh = []
+        for binding in snap.cluster_role_bindings:
+            created = binding.metadata.creation_timestamp
+            ref = binding.role_ref
+            if not created or not ref or ref.kind != "ClusterRole" or ref.name != "cluster-admin":
+                continue
+            if idx.now - created > timedelta(days=7):
+                continue
+            subjects = []
+            for subject in binding.subjects or []:
+                name = subject.name or ""
+                if name.startswith("system:"):
+                    continue
+                if subject.kind == "ServiceAccount" and (subject.namespace or "") in idx.system_namespaces:
+                    continue
+                subjects.append(f"{subject.kind} {subject.namespace + '/' if subject.namespace else ''}{name}")
+            if subjects:
+                fresh.append(Affected("", binding.metadata.name, "; ".join(subjects[:3]), "ClusterRoleBinding"))
+        if fresh:
+            out.append(Insight(
+                "new-admin-binding", Category.security, "warning",
+                f"{len(fresh)} cluster-admin binding(s) were created in the last 7 days",
+                "New cluster-wide admin identities are a common sign of a rushed break-glass action or a rogue automation account.",
+                "The subject can read Secrets and change every object in the cluster.",
+                "Confirm each binding has an owner and an expiry. Remove it when the task is finished.",
+                "kubectl get clusterrolebinding <name> -o yaml",
+                fresh,
+            ))
+    hot_cpu = []
+    for pod in idx.workload_pods:
+        if not pod.usage:
+            continue
+        unbounded = pod.limits.cpu == 0 and pod.usage.cpu >= 0.5
+        over_request = pod.requests.cpu > 0 and pod.usage.cpu >= max(1.0, pod.requests.cpu * 4)
+        if unbounded or over_request:
+            relation = "no CPU limit" if unbounded else f"{pod.usage.cpu / pod.requests.cpu:.0f}× its CPU request"
+            hot_cpu.append((pod, f"{cores(pod.usage.cpu)} used, {relation}"))
+    if hot_cpu:
+        details = {id(pod): text for pod, text in hot_cpu}
+        out.append(Insight(
+            "unbounded-cpu", Category.efficiency, "warning",
+            f"{_workloads(pod for pod, _ in hot_cpu)} workload(s) are using far more CPU than reserved",
+            "CPU is either unlimited or several times the request.",
+            "A runaway batch job, a retry storm, or unexpected compute can saturate nodes and create a sudden cloud bill.",
+            "Set a CPU limit close to the legitimate peak, then identify the process with kubectl top and the application profile.",
+            "kubectl top pod -A --sort-by=cpu",
+            _group_pods([pod for pod, _ in hot_cpu], lambda pod: details[id(pod)]),
+        ))
+    young = []
+    for node in idx.nodes.values():
+        created = node.node.metadata.creation_timestamp
+        if created and idx.now - created <= timedelta(hours=6):
+            young.append(Affected("", node.name, f"age {age(idx.now - created)}", "Node"))
+    if len(young) >= 2:
+        out.append(Insight(
+            "node-provisioning", Category.efficiency, "warning",
+            f"{len(young)} nodes joined in the last 6 hours",
+            "The cluster is adding capacity quickly.",
+            "An autoscaler reacting to a spike, a stuck job, or unrestricted requests can provision more machines than expected.",
+            "Check which pods are pending or unschedulable before accepting the new capacity as normal demand.",
+            "kubectl get nodes --sort-by=.metadata.creationTimestamp",
+            young,
+        ))
+    if snap.coverage.get("jobs") == "ok" or snap.coverage.get("cronjobs") == "ok":
+        runaway = []
+        for job in snap.jobs:
+            started = job.status.start_time if job.status else None
+            active = job.status.active if job.status else 0
+            if active and started and idx.now - started > t.window:
+                runaway.append(Affected(
+                    job.metadata.namespace, job.metadata.name,
+                    f"active for {age(idx.now - started)}", "Job",
+                ))
+        for cron in snap.cronjobs:
+            spec = cron.spec.job_template.spec if cron.spec and cron.spec.job_template else None
+            parallelism = (spec.parallelism or 1) if spec else 1
+            if spec and parallelism >= 8 and not spec.active_deadline_seconds:
+                runaway.append(Affected(
+                    cron.metadata.namespace, cron.metadata.name,
+                    f"parallelism {parallelism}, no active deadline", "CronJob",
+                ))
+        if runaway:
+            out.append(Insight(
+                "runaway-jobs", Category.efficiency, "warning",
+                f"{len(runaway)} Job or CronJob(s) can run without a time or fan-out bound",
+                "A job is still active beyond the analysis window, or a CronJob can start many pods with no deadline.",
+                "Batch work can hold nodes and requests long after the useful work has stalled.",
+                "Set activeDeadlineSeconds and a modest parallelism. Alert when a Job remains active past its expected duration.",
+                "kubectl get jobs -A",
+                runaway,
+            ))
+    patterns: dict[tuple[str, str, str], int] = defaultdict(int)
+    for event in snap.events:
+        obj = event.involved_object
+        namespace = (obj.namespace if obj else None) or event.metadata.namespace or ""
+        if idx.is_system(namespace):
+            continue
+        message = " ".join((event.message or "").split())[:120]
+        patterns[(namespace, event.reason or "?", message)] += event.count or 1
+    repeated = sorted(patterns.items(), key=lambda item: item[1], reverse=True)
+    repeated = [(key, count) for key, count in repeated if count >= 100]
+    if repeated:
+        out.append(Insight(
+            "repeating-errors", Category.reliability, "warning",
+            f"{len(repeated)} error pattern(s) have repeated at least 100 times",
+            "The same warning text is being emitted continuously.",
+            "A dependency, probe, or logic failure can stay hidden when each line looks like routine noise.",
+            "Group the pattern in Loki or your log store, fix the first unique failure, and alert on the count rather than every line.",
+            "kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp",
+            [Affected(ns, reason, f"×{count:,} {message}", "Event") for (ns, reason, message), count in repeated[:30]],
+        ))
+    return out
+
+
 RULES: list[Rule] = [
     node_health, workload_availability, container_failures, oom_and_restarts,
     pending_and_evicted, resilience, warning_events,
     node_utilization, request_saturation, request_coverage, headroom,
     missing_resources, rightsizing, leftovers,
-    security, autoscaling, platform,
+    security, autoscaling, platform, runtime_and_cost,
 ]

@@ -26,6 +26,7 @@ what is wasting money, each with a concrete fix.
 
 - **Nodes, namespaces, top pods and warning events:** all tables are sortable. Namespaces have their own score, and you can click one to filter the whole page.
 - **Export** the report as Markdown (for tickets/PRs) or JSON (for automation).
+- **Detection vectors:** security and runtime, performance, repeated error patterns, and cost. Each card lists what this snapshot can prove and the sensor required for what it cannot see, such as syscalls or per-connection egress.
 - **Advisors**, from the same snapshot:
   - **Security** — Pod Security admission, cluster-admin bindings, dangerous capabilities, hostPath, default ServiceAccounts, LoadBalancers, and Ingresses without TLS.
   - **Upgrades** — where the control plane sits in the upstream support window, the patch you are behind, kubelet skew, and what to fix before a node drain. The catalog is dated; the page links to kubernetes.io/releases.
@@ -66,6 +67,7 @@ selected cluster and namespace filter, so links can be shared.
 | GET | `/v1/dashboard?context=` | Report + baseline status |
 | GET | `/v1/intelligence?context=` | Forecasts + cached AI result; no model call |
 | POST | `/v1/intelligence?context=&force=&notify=` | Generate RCA; optionally send configured alerts |
+| POST | `/v1/chat?context=` | Ask a question about the current snapshot |
 | POST | `/v1/evaluate` | Run a baseline detection cycle |
 | GET | `/v1/anomalies`, `/v1/incidents`, `/v1/incidents/{id}` | Baseline results |
 | GET | `/docs` | OpenAPI UI |
@@ -142,6 +144,18 @@ The evidence pipeline:
 
 AI output is a hypothesis, not proof. Each root cause includes evidence and
 checks that can disprove it. Confirm those checks before applying a change.
+
+The dashboard **Ask** button answers questions about the selected cluster.
+A named pod's CPU or memory, and whether a node is Ready, are read from the
+snapshot. An open question such as "why" is sent to the same provider with only
+the matching nodes, pods, events, and findings. Refreshing the page does not
+call the model.
+
+```bash
+curl -s -X POST 'http://localhost:8080/v1/chat?context=my-cluster' \
+  -H 'content-type: application/json' \
+  -d '{"question":"Which pod is using the most CPU?"}'
+```
 
 ## Install on any cluster
 

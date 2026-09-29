@@ -19,11 +19,11 @@
       </div>
       <div class="controls">
         <label class="field">
-          <span>Cluster</span>
+          <span>Cluster <button type="button" class="help" data-help="cluster" aria-label="Help: cluster">?</button></span>
           <select id="context-select" aria-label="Kubernetes context"></select>
         </label>
         <label class="field">
-          <span>Namespace</span>
+          <span>Namespace <button type="button" class="help" data-help="namespace" aria-label="Help: namespace">?</button></span>
           <select id="namespace-select" aria-label="Namespace filter">
             <option value="">All namespaces</option>
             <option value="__workloads">Exclude system</option>
@@ -48,7 +48,7 @@
         <article class="card score-card">
           <div class="ring" id="score-ring"><strong id="score-grade">–</strong><span id="score-value">–/100</span></div>
           <div>
-            <p class="label">Cluster health</p>
+            <p class="label">Cluster health <button type="button" class="help" data-help="health" aria-label="Help: cluster health">?</button></p>
             <h2 id="score-headline">Analyzing…</h2>
             <p id="score-summary" class="muted"></p>
             <div id="coverage" class="chips"></div>
@@ -61,7 +61,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Capacity</p>
-            <h2>Usage vs requests vs limits</h2>
+            <h2>Usage vs requests vs limits <button type="button" class="help" data-help="capacity" aria-label="Help: capacity">?</button></h2>
             <p class="muted">Usage comes from the Metrics API. The scheduler only sees requests.</p>
           </div>
         </header>
@@ -72,8 +72,19 @@
       <section class="card">
         <header class="section-head">
           <div>
+            <p class="eyebrow">Coverage</p>
+            <h2>Detection vectors <button type="button" class="help" data-help="vectors" aria-label="Help: detection vectors">?</button></h2>
+            <p class="muted">Security runtime, performance, repeating failures, and cost. Blind spots name the sensor this API snapshot cannot replace.</p>
+          </div>
+        </header>
+        <div id="vectors" class="vector-grid"></div>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
             <p class="eyebrow">Prioritised</p>
-            <h2>Top actions</h2>
+            <h2>Top actions <button type="button" class="help" data-help="actions" aria-label="Help: top actions">?</button></h2>
           </div>
         </header>
         <ol id="quick-wins" class="wins"></ol>
@@ -83,7 +94,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Guidance</p>
-            <h2>Advisors</h2>
+            <h2>Advisors <button type="button" class="help" data-help="advisors" aria-label="Help: advisors">?</button></h2>
             <p class="muted">Security posture, the Kubernetes upgrade path, and a root-cause note when something is failing. These are hypotheses from the snapshot; confirm them before changing the cluster.</p>
           </div>
         </header>
@@ -94,7 +105,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Intelligence</p>
-            <h2>AI investigation and early warnings</h2>
+            <h2>AI investigation and early warnings <button type="button" class="help" data-help="intelligence" aria-label="Help: AI investigation">?</button></h2>
             <p id="intelligence-status" class="muted">Provider not configured.</p>
           </div>
           <button id="run-intelligence" class="ghost" type="button">Generate investigation</button>
@@ -107,7 +118,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Findings</p>
-            <h2>Insights <span id="insight-count" class="count"></span></h2>
+            <h2>Insights <span id="insight-count" class="count"></span> <button type="button" class="help" data-help="insights" aria-label="Help: insights">?</button></h2>
           </div>
           <div class="filters">
             <div id="severity-filters" class="seg" role="group" aria-label="Severity">
@@ -132,7 +143,7 @@
 
       <section class="card">
         <header class="section-head">
-          <div><p class="eyebrow">Infrastructure</p><h2>Nodes</h2></div>
+          <div><p class="eyebrow">Infrastructure</p><h2>Nodes <button type="button" class="help" data-help="nodes" aria-label="Help: nodes">?</button></h2></div>
         </header>
         <div class="table-wrap"><table id="nodes-table"></table></div>
       </section>
@@ -140,13 +151,13 @@
       <section class="grid-2">
         <article class="card">
           <header class="section-head">
-            <div><p class="eyebrow">Blast radius</p><h2>Namespaces</h2></div>
+            <div><p class="eyebrow">Blast radius</p><h2>Namespaces <button type="button" class="help" data-help="namespaces" aria-label="Help: namespaces">?</button></h2></div>
           </header>
           <div class="table-wrap tall"><table id="namespaces-table"></table></div>
         </article>
         <article class="card">
           <header class="section-head">
-            <div><p class="eyebrow">Consumers</p><h2>Top pods by memory</h2></div>
+            <div><p class="eyebrow">Consumers</p><h2>Top pods by memory <button type="button" class="help" data-help="pods" aria-label="Help: top pods">?</button></h2></div>
           </header>
           <div class="table-wrap tall"><table id="pods-table"></table></div>
         </article>
@@ -156,7 +167,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Signals</p>
-            <h2>Warning events</h2>
+            <h2>Warning events <button type="button" class="help" data-help="events" aria-label="Help: warning events">?</button></h2>
             <p class="muted" id="events-caption"></p>
           </div>
         </header>
@@ -167,7 +178,7 @@
         <header class="section-head">
           <div>
             <p class="eyebrow">Time series</p>
-            <h2>Baseline anomalies</h2>
+            <h2>Baseline anomalies <button type="button" class="help" data-help="baseline" aria-label="Help: baseline anomalies">?</button></h2>
             <p class="muted" id="baseline-status"></p>
           </div>
           <button id="evaluate" class="ghost" type="button">Run evaluation</button>
@@ -181,6 +192,30 @@
       <a href="/docs">API</a>
     </footer>
     <div id="toast" class="toast hidden" role="status"></div>
+    <button id="chat-open" class="chat-launcher" type="button">Ask</button>
+    <aside id="chat-panel" class="chat-panel hidden" aria-label="Cluster chat">
+      <header>
+        <div>
+          <h2>Ask about this cluster <button type="button" class="help" data-help="chat" aria-label="Help: cluster chat">?</button></h2>
+          <p id="chat-status" class="muted">Answers use the current snapshot.</p>
+        </div>
+        <button id="chat-close" type="button" aria-label="Close chat">×</button>
+      </header>
+      <div id="chat-log" class="chat-log"></div>
+      <div id="chat-suggestions" class="chat-suggestions">
+        <button type="button" data-question="Why is a node not Ready?">Why is a node not Ready?</button>
+        <button type="button" data-question="Which pod is using the most CPU?">Which pod uses the most CPU?</button>
+        <button type="button" data-question="What should I look at first?">What should I look at first?</button>
+      </div>
+      <form id="chat-form">
+        <textarea id="chat-input" rows="2" maxlength="2000" placeholder="Why did a node go NotReady? What CPU is this pod using?"></textarea>
+        <button id="chat-send" type="submit">Send</button>
+      </form>
+    </aside>
+    <div id="help-pop" class="help-pop hidden" role="dialog" aria-labelledby="help-pop-title">
+      <h3 id="help-pop-title"></h3>
+      <p id="help-pop-body"></p>
+    </div>
     <script src="/assets/dashboard.js" defer></script>
   </body>
 </html>

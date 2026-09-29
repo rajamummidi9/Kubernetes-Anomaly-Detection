@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from anomaly_detection import __version__
@@ -95,8 +96,10 @@ async def dashboard(context: str | None = None, force: bool = False) -> dict:
     report = await asyncio.to_thread(analyzer.analyze, context, force)
     ai = intelligence.snapshot(report)
     latest = engine.latest
+    # The chat endpoint reads pod_catalog from the cached report. The page does not.
+    cluster = {key: value for key, value in report.items() if key != "pod_catalog"}
     return {
-        "cluster": report,
+        "cluster": cluster,
         "baseline": {
             "status": engine.status,
             "enabled": engine.enabled,
@@ -114,6 +117,23 @@ async def intelligence_latest(context: str | None = None) -> dict:
     if not (report.get("meta") or {}).get("connected"):
         raise HTTPException(status_code=502, detail=(report.get("meta") or {}).get("error"))
     return intelligence.snapshot(report)
+
+
+class ChatBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    history: list[dict] = Field(default_factory=list, max_length=8)
+
+
+@app.post("/v1/chat")
+async def cluster_chat(body: ChatBody, context: str | None = None) -> dict:
+    """Answer one question from the current snapshot. Open questions use the configured model."""
+    report = await asyncio.to_thread(analyzer.analyze, context, False)
+    if not (report.get("meta") or {}).get("connected"):
+        raise HTTPException(status_code=502, detail=(report.get("meta") or {}).get("error"))
+    try:
+        return await intelligence.chat(report, body.question, body.history)
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/v1/intelligence")
