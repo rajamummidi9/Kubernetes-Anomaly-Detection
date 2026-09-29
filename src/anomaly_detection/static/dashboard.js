@@ -145,6 +145,7 @@ function render() {
   renderCapacity(report.capacity, meta.metrics_available);
   renderQuickWins(report.quick_wins);
   renderAdvisors(report.advisors);
+  renderIntelligence(state.data.intelligence);
   renderInsights();
   renderNodes(report.nodes);
   renderNamespaces(report.namespaces);
@@ -273,6 +274,46 @@ function renderAdvisors(advisors) {
     `<article class="advisor"><p class="label">Upgrades · ${esc(upgrades.status || "")}${upgrades.provider ? ` · ${esc(upgrades.provider)}` : ""}</p><h3>${esc(upgrades.headline || "")}</h3>${upgrades.skew_summary ? `<p class="muted">${esc(upgrades.skew_summary)}</p>` : ""}${upgradeBody}</article>`,
     `<article class="advisor"><p class="label">Root cause</p><h3>${cases.length ? `${cases.length} investigation${cases.length > 1 ? "s" : ""}` : "No active incident"}</h3>${caseBody}</article>`,
   ].join("");
+}
+
+function renderIntelligence(ai) {
+  const status = ai?.status || {};
+  const predictions = ai?.predictions || [];
+  const result = ai?.result;
+  $("intelligence-status").textContent =
+    `${status.status || "not configured"} · ${ai?.history_points || 0} history point(s)` +
+    (status.provider ? ` · ${status.provider}/${status.model}` : "");
+  $("run-intelligence").disabled = !status.enabled;
+  $("predictions").innerHTML = predictions.length
+    ? `<h3>Early warnings</h3><div class="prediction-grid">${predictions.map((p) => `
+      <article class="prediction ${p.severity}">
+        <h3><span class="sev ${p.severity}">${p.severity}</span>${esc(p.title)}</h3>
+        <p>${esc(p.probability)} probability · ${esc(p.horizon)}</p>
+        <ul>${p.evidence.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>
+        <strong>${esc(p.recommendation)}</strong>
+      </article>`).join("")}</div>`
+    : `<div class="empty">Collecting history. Capacity risks appear immediately; trend forecasts need at least three forced refreshes.</div>`;
+  if (!result) {
+    $("ai-investigation").innerHTML = `<div class="empty">${status.enabled
+      ? "Select Generate investigation to ask the configured model. No tokens are spent during normal refreshes."
+      : "Set AI_PROVIDER, AI_MODEL, and AI_API_KEY in a Secret. Ollama does not require a key."}</div>`;
+    return;
+  }
+  const roots = result.root_causes || [];
+  $("ai-investigation").innerHTML = `
+    <div class="ai-summary"><span class="tag">${esc(result.situation)}</span><strong>${esc(result.summary)}</strong>
+      <span class="muted">${esc(result.provider)}/${esc(result.model)} · ${timeAgo(result.generated_at)}${result.cached ? " · cached" : ""}</span></div>
+    ${roots.map((r) => `<article class="root-cause">
+      <h3>${esc(r.title)} <span class="tag">${esc(r.confidence)} confidence</span></h3>
+      <p>${esc(r.hypothesis)}</p>
+      <ul class="evidence">${r.evidence.map((e) => `<li><strong>${esc(e.source)}:</strong> ${esc(e.observation)}</li>`).join("")}</ul>
+      ${r.disconfirming_checks.length ? `<p class="muted"><strong>Disprove it:</strong> ${esc(r.disconfirming_checks.join(" · "))}</p>` : ""}
+    </article>`).join("")}
+    <h3>Prioritised actions</h3>
+    <ul class="advice">${(result.actions || []).map((a) =>
+      `<li><h3><span class="tag">${esc(a.priority)}</span>${esc(a.title)}</h3><p>${esc(a.rationale)}</p>${fixBlock(a.command)}</li>`
+    ).join("")}</ul>
+    ${result.limitations?.length ? `<p class="muted"><strong>Limitations:</strong> ${esc(result.limitations.join(" · "))}</p>` : ""}`;
 }
 
 function renderInsights() {
@@ -496,6 +537,22 @@ $("evaluate").addEventListener("click", async () => {
   try { await getJson("/v1/evaluate", { method: "POST" }); await load(); }
   catch (err) { showError(`Baseline evaluation failed: ${err.message}`); }
   finally { b.disabled = false; }
+});
+$("run-intelligence").addEventListener("click", async () => {
+  const b = $("run-intelligence");
+  b.disabled = true;
+  b.textContent = "Investigating…";
+  try {
+    const q = new URLSearchParams({ context: state.context, force: "true" });
+    state.data.intelligence = await getJson(`/v1/intelligence?${q}`, { method: "POST" });
+    renderIntelligence(state.data.intelligence);
+    toast("AI investigation generated");
+  } catch (err) {
+    showError(`AI investigation failed: ${err.message}`);
+  } finally {
+    b.textContent = "Generate investigation";
+    b.disabled = !state.data?.intelligence?.status?.enabled;
+  }
 });
 
 function schedule() {

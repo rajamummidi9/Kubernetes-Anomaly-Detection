@@ -64,6 +64,8 @@ selected cluster and namespace filter, so links can be shared.
 | GET | `/v1/analysis?context=&force=` | Full cluster report (JSON) |
 | GET | `/v1/report.md?context=` | Markdown report |
 | GET | `/v1/dashboard?context=` | Report + baseline status |
+| GET | `/v1/intelligence?context=` | Forecasts + cached AI result; no model call |
+| POST | `/v1/intelligence?context=&force=&notify=` | Generate RCA; optionally send configured alerts |
 | POST | `/v1/evaluate` | Run a baseline detection cycle |
 | GET | `/v1/anomalies`, `/v1/incidents`, `/v1/incidents/{id}` | Baseline results |
 | GET | `/docs` | OpenAPI UI |
@@ -88,6 +90,58 @@ See `.env.example`. The main settings:
 | `NODE_WARN_PERCENT` / `NODE_CRITICAL_PERCENT` | 80 / 90 | Node utilisation thresholds |
 | `CACHE_TTL_SECONDS` | 30 | Snapshot cache per cluster |
 | `PROMETHEUS_URL` / `MIMIR_URL` | empty | Enables the baseline detector |
+
+## Optional AI intelligence
+
+Rules and forecasts detect the problem. The AI layer only explains the supplied
+evidence, drafts a prioritized RCA, and formats an alert. It has no Kubernetes
+client, tools, shell, kubeconfig, or mutation endpoint.
+
+Supported providers:
+
+| `AI_PROVIDER` | Required settings |
+|---|---|
+| `openai_compatible` | `AI_MODEL`, `AI_API_KEY`; optional `AI_BASE_URL` for compatible gateways |
+| `azure_openai` | deployment name in `AI_MODEL`, resource endpoint in `AI_BASE_URL`, `AI_API_KEY` |
+| `anthropic` | `AI_MODEL`, `AI_API_KEY` |
+| `gemini` | `AI_MODEL`, `AI_API_KEY` |
+| `ollama` | `AI_MODEL`; optional `AI_BASE_URL` (defaults to `http://localhost:11434`) |
+
+Example using an OpenAI-compatible endpoint:
+
+```bash
+export AI_PROVIDER=openai_compatible
+export AI_MODEL=<model-available-to-your-account>
+export AI_API_KEY=<secret>
+make dev
+```
+
+Normal dashboard refreshes do not call the model. Select **Generate
+investigation**, or call:
+
+```bash
+curl -X POST 'http://localhost:8080/v1/intelligence?force=true'
+```
+
+`GET /v1/intelligence` returns deterministic early warnings and the last AI
+result without spending tokens. Capacity risks are immediate. Trend warnings
+need three or more forced observations and use a transparent linear slope, not
+an LLM guess.
+
+For periodic analysis and alerting, set `INTELLIGENCE_AUTO_RUN=true`, plus one
+or more of `ALERT_WEBHOOK_URL`, `SLACK_WEBHOOK_URL`, or `TEAMS_WEBHOOK_URL`.
+Alerts are severity-filtered and deduplicated for `AI_CACHE_TTL_SECONDS`.
+
+The evidence pipeline:
+
+1. Selects scores, findings, warning events, deterministic investigations, and forecasts.
+2. Redacts secret-like fields, bearer tokens, JWTs, and private keys.
+3. Caps the payload at `AI_MAX_INPUT_CHARS`.
+4. Treats every Kubernetes string as untrusted data and requires structured JSON.
+5. Validates the response with Pydantic before showing or alerting it.
+
+AI output is a hypothesis, not proof. Each root cause includes evidence and
+checks that can disprove it. Confirm those checks before applying a change.
 
 ## Install on any cluster
 

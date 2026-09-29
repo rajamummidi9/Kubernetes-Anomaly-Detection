@@ -74,6 +74,26 @@ affinity: {}
 kubeconfig:
   existingSecret: ""
 
+# Optional AI intelligence layer. Keep API keys and webhook URLs in a Secret,
+# never in values.yaml. Supported providers: openai_compatible, azure_openai,
+# anthropic, gemini, ollama.
+intelligence:
+  provider: ""
+  model: ""
+  baseUrl: ""
+  apiVersion: "2024-10-21"
+  existingSecret: ""
+  apiKeySecretKey: AI_API_KEY
+  alertWebhookSecretKey: ALERT_WEBHOOK_URL
+  slackWebhookSecretKey: SLACK_WEBHOOK_URL
+  teamsWebhookSecretKey: TEAMS_WEBHOOK_URL
+  timeoutSeconds: 45
+  maxInputChars: 60000
+  cacheTtlSeconds: 900
+  intervalSeconds: 300
+  autoRun: false
+  alertMinSeverity: warning
+
 # Analysis settings. Empty prometheus URL disables the baseline detector.
 config:
   prometheusUrl: ""

@@ -49,6 +49,22 @@ class Settings(BaseSettings):
     slack_webhook_url: str | None = None
     teams_webhook_url: str | None = None
 
+    # Optional provider-neutral intelligence layer. The key must come from an
+    # environment variable or Secret; it is never returned by the API.
+    ai_provider: str = ""
+    ai_model: str = ""
+    ai_api_key: str = ""
+    ai_base_url: str = ""
+    ai_api_version: str = "2024-10-21"
+    ai_timeout_seconds: int = 45
+    ai_max_input_chars: int = 60_000
+    ai_cache_ttl_seconds: int = 900
+    ai_temperature: float = 0.1
+    intelligence_interval_seconds: int = 300
+    intelligence_auto_run: bool = False
+    alert_webhook_url: str = ""
+    alert_min_severity: str = "warning"
+
     demo_mode: bool = False
     config_path: Path = CONFIG_DIR / "default.yaml"
     queries_path: Path = CONFIG_DIR / "queries.yaml"

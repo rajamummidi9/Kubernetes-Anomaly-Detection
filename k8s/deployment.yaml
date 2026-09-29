@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: engine
-          image: ghcr.io/rajamummidi9/kubernetes-anomaly-detection:0.2.0
+          image: ghcr.io/rajamummidi9/kubernetes-anomaly-detection:0.3.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

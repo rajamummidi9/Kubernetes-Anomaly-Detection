@@ -220,4 +220,8 @@ def test_api_serves_page_and_analysis(monkeypatch):
         body = client.get("/v1/dashboard?context=test").json()
         assert body["cluster"]["meta"]["context"] == "test"
         assert body["baseline"]["enabled"] is False
+        assert body["intelligence"]["status"]["enabled"] is False
+        assert "predictions" in body["intelligence"]
+        assert client.get("/v1/intelligence?context=test").status_code == 200
+        assert client.post("/v1/intelligence?context=test").status_code == 503
         assert client.get("/v1/report.md").text.startswith("# Cluster health report")

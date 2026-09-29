@@ -213,6 +213,19 @@ tr:hover td { background: rgba(255,255,255,.015); }
 .investigation h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; font-size: .84rem; }
 .evidence { margin: 8px 0 0; padding-left: 16px; color: var(--muted); font-size: .75rem; }
 .evidence li { margin: 2px 0; }
+.predictions > h3 { margin-bottom: 10px; }
+.prediction-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.prediction { border: 1px solid var(--border); border-left: 3px solid var(--info); border-radius: 9px; background: var(--surface); padding: 12px; }
+.prediction.warning { border-left-color: var(--warning); }
+.prediction.critical { border-left-color: var(--critical); }
+.prediction h3 { display: flex; gap: 7px; align-items: center; font-size: .83rem; }
+.prediction p, .prediction li, .prediction strong { color: var(--muted); font-size: .75rem; }
+.prediction ul { margin: 7px 0; padding-left: 17px; }
+.ai-investigation { margin-top: 12px; }
+.ai-summary { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.root-cause { margin-top: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.root-cause h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; }
+.root-cause p { color: var(--muted); font-size: .82rem; }
 
 .empty { padding: 22px; text-align: center; color: var(--muted); font-size: .84rem; }
 .skeleton { height: 64px; border-radius: 10px; background: linear-gradient(90deg, #111c19, #182824, #111c19); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
@@ -222,7 +235,7 @@ tr:hover td { background: rgba(255,255,255,.015); }
 
 @media (max-width: 1200px) {
   .score-row { grid-template-columns: 1fr; }
-  .capacity-grid, .advisor-grid { grid-template-columns: 1fr; }
+  .capacity-grid, .advisor-grid, .prediction-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
   .tiles { grid-template-columns: repeat(2, 1fr); }
@@ -230,5 +243,6 @@ tr:hover td { background: rgba(255,255,255,.015); }
   .topbar, .shell { padding-left: 14px; padding-right: 14px; }
   .filters input { min-width: 0; width: 100%; }
   .kv { grid-template-columns: 1fr; }
+  .ai-summary { grid-template-columns: 1fr; }
   .wins li { grid-template-columns: 28px 1fr; }
 }

@@ -28,6 +28,23 @@ internals.
 - Set `config.prometheusUrl` only to a metrics endpoint you trust. The process
   sends PromQL there. It does not send cluster data anywhere else.
 
+## AI data boundary
+
+The optional intelligence layer sends a compact report to the configured model
+provider: scores, resource totals, finding text, warning events, deterministic
+investigations, and forecasts. It does not send Kubernetes Secret objects,
+environment variables, a kubeconfig, or raw pod specs. Secret-like fields,
+authorization headers, JWTs, and private-key blocks are redacted and the payload
+is size-limited.
+
+Kubernetes object names and event messages are treated as untrusted prompt
+content. The model has no tools and cannot call Kubernetes. Its JSON response is
+schema-validated, but it is still a hypothesis. Do not automatically execute AI
+commands or remediation.
+
+Keep `AI_API_KEY` and webhook URLs in a Kubernetes Secret referenced by
+`intelligence.existingSecret`; never put them in Helm values or Git.
+
 ## Scope
 
 Advisors suggest checks. They do not apply changes, open shells on nodes, or

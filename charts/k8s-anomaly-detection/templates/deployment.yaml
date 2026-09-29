@@ -54,6 +54,52 @@ spec:
               value: {{ .Values.config.cacheTtlSeconds | quote }}
             - name: ANOMALY_THRESHOLD
               value: {{ .Values.config.anomalyThreshold | quote }}
+            - name: AI_PROVIDER
+              value: {{ .Values.intelligence.provider | quote }}
+            - name: AI_MODEL
+              value: {{ .Values.intelligence.model | quote }}
+            - name: AI_BASE_URL
+              value: {{ .Values.intelligence.baseUrl | quote }}
+            - name: AI_API_VERSION
+              value: {{ .Values.intelligence.apiVersion | quote }}
+            - name: AI_TIMEOUT_SECONDS
+              value: {{ .Values.intelligence.timeoutSeconds | quote }}
+            - name: AI_MAX_INPUT_CHARS
+              value: {{ .Values.intelligence.maxInputChars | quote }}
+            - name: AI_CACHE_TTL_SECONDS
+              value: {{ .Values.intelligence.cacheTtlSeconds | quote }}
+            - name: INTELLIGENCE_INTERVAL_SECONDS
+              value: {{ .Values.intelligence.intervalSeconds | quote }}
+            - name: INTELLIGENCE_AUTO_RUN
+              value: {{ .Values.intelligence.autoRun | quote }}
+            - name: ALERT_MIN_SEVERITY
+              value: {{ .Values.intelligence.alertMinSeverity | quote }}
+            {{- if .Values.intelligence.existingSecret }}
+            - name: AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.intelligence.existingSecret }}
+                  key: {{ .Values.intelligence.apiKeySecretKey }}
+                  optional: true
+            - name: ALERT_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.intelligence.existingSecret }}
+                  key: {{ .Values.intelligence.alertWebhookSecretKey }}
+                  optional: true
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.intelligence.existingSecret }}
+                  key: {{ .Values.intelligence.slackWebhookSecretKey }}
+                  optional: true
+            - name: TEAMS_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.intelligence.existingSecret }}
+                  key: {{ .Values.intelligence.teamsWebhookSecretKey }}
+                  optional: true
+            {{- end }}
             {{- if .Values.kubeconfig.existingSecret }}
             - name: KUBECONFIG
               value: /var/run/kube/kubeconfig

@@ -32,4 +32,7 @@ jobs:
             --set networkPolicy.enabled=true \
             --set podDisruptionBudget.enabled=true \
             --set kubeconfig.existingSecret=analyzer-kubeconfig \
+            --set intelligence.provider=azure_openai \
+            --set intelligence.model=test-deployment \
+            --set intelligence.existingSecret=anomaly-ai \
             | grep -E 'kind: (Ingress|NetworkPolicy|PodDisruptionBudget|Deployment)'

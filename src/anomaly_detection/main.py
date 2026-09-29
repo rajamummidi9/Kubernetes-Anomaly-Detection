@@ -11,19 +11,24 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from anomaly_detection import __version__
 from anomaly_detection.config import get_settings
 from anomaly_detection.engine import AnomalyEngine
+from anomaly_detection.intelligence import IntelligenceEngine
+from anomaly_detection.intelligence.providers import ProviderError
 from anomaly_detection.insights.report import ClusterAnalyzer, to_markdown
 from anomaly_detection.models import EvaluationResult, Incident
 
 settings = get_settings()
 engine = AnomalyEngine(settings)
 analyzer = ClusterAnalyzer(settings, ttl_seconds=settings.cache_ttl_seconds)
+intelligence = IntelligenceEngine(settings)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await engine.evaluate()
+    intelligence.start(lambda: analyzer.analyze(settings.kube_context or None, True))
     yield
+    await intelligence.aclose()
     await engine.aclose()
 
 
@@ -55,6 +60,7 @@ async def health() -> dict:
         "version": __version__,
         "demo_mode": settings.demo_mode,
         "baseline": engine.status,
+        "intelligence": intelligence.service.status().model_dump(),
     }
 
 
@@ -70,7 +76,9 @@ async def contexts() -> dict:
 @app.get("/v1/analysis")
 async def analysis(context: str | None = None, force: bool = False) -> dict:
     """Full read-only analysis of one cluster context."""
-    return await asyncio.to_thread(analyzer.analyze, context, force)
+    report = await asyncio.to_thread(analyzer.analyze, context, force)
+    intelligence.observe(report)
+    return report
 
 
 @app.get("/v1/report.md", response_class=PlainTextResponse)
@@ -85,6 +93,7 @@ async def report_markdown(context: str | None = None) -> str:
 async def dashboard(context: str | None = None, force: bool = False) -> dict:
     """Cluster analysis plus Prometheus baseline incidents in one call."""
     report = await asyncio.to_thread(analyzer.analyze, context, force)
+    ai = intelligence.snapshot(report)
     latest = engine.latest
     return {
         "cluster": report,
@@ -93,8 +102,34 @@ async def dashboard(context: str | None = None, force: bool = False) -> dict:
             "enabled": engine.enabled,
             "result": latest.model_dump(mode="json") if latest else None,
         },
+        "intelligence": ai,
         "version": __version__,
     }
+
+
+@app.get("/v1/intelligence")
+async def intelligence_latest(context: str | None = None) -> dict:
+    """Deterministic predictions and the latest AI analysis without spending tokens."""
+    report = await asyncio.to_thread(analyzer.analyze, context, False)
+    if not (report.get("meta") or {}).get("connected"):
+        raise HTTPException(status_code=502, detail=(report.get("meta") or {}).get("error"))
+    return intelligence.snapshot(report)
+
+
+@app.post("/v1/intelligence")
+async def run_intelligence(
+    context: str | None = None,
+    force: bool = False,
+    notify: bool = False,
+) -> dict:
+    """Generate evidence-grounded RCA and optionally deliver configured alerts."""
+    report = await asyncio.to_thread(analyzer.analyze, context, force)
+    if not (report.get("meta") or {}).get("connected"):
+        raise HTTPException(status_code=502, detail=(report.get("meta") or {}).get("error"))
+    try:
+        return await intelligence.generate(report, force=force, notify=notify)
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/v1/evaluate", response_model=EvaluationResult)
