@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-engine
+  namespace: anomaly-detection
+  labels:
+    app: anomaly-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anomaly-engine
+  template:
+    metadata:
+      labels:
+        app: anomaly-engine
+    spec:
+      serviceAccountName: anomaly-engine
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: engine
+          image: ghcr.io/rajamummidi9/kubernetes-anomaly-detection:0.2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DEMO_MODE
+              value: "false"
+            # Leave empty to disable the baseline detector; set to your Prometheus/Cortex/Mimir query URL.
+            - name: PROMETHEUS_URL
+              value: ""
+            - name: WATCH_NAMESPACES
+              value: ""
+            - name: EVENT_WINDOW_HOURS
+              value: "6"
+            - name: ANOMALY_THRESHOLD
+              value: "70"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/default.yaml
+              subPath: default.yaml
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: anomaly-engine-config
+        - name: tmp
+          emptyDir: {}

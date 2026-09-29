@@ -1,0 +1,12 @@
+The dashboard is read-only, and it lists workloads, events, and security gaps.
+Keep the Service on the cluster network. Turn on ingress.annotations with an
+authenticating proxy before any host is reachable from outside the cluster.
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "anomaly.fullname" . }} 8080:{{ .Values.service.port }}
+
+Then open http://127.0.0.1:8080
+
+The chart talks to the cluster it is installed in, using ServiceAccount
+{{ include "anomaly.serviceAccountName" . }}. To analyze a different cluster,
+set kubeconfig.existingSecret to a Secret whose key is "kubeconfig" and set
+KUBECONFIG=/var/run/kube/kubeconfig with extraEnv.

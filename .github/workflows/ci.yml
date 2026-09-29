@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -m compileall -q src
+      - run: pytest -q
+
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - run: helm lint charts/k8s-anomaly-detection
+      - run: helm template anomaly charts/k8s-anomaly-detection >/dev/null
+      - name: Ingress and NetworkPolicy render when enabled
+        run: |
+          helm template anomaly charts/k8s-anomaly-detection \
+            --set ingress.enabled=true \
+            --set networkPolicy.enabled=true \
+            --set podDisruptionBudget.enabled=true \
+            --set kubeconfig.existingSecret=analyzer-kubeconfig \
+            | grep -E 'kind: (Ingress|NetworkPolicy|PodDisruptionBudget|Deployment)'

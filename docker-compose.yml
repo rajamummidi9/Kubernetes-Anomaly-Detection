@@ -1,0 +1,10 @@
+services:
+  anomaly-engine:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DEMO_MODE: "true"
+      LOG_LEVEL: INFO
+    volumes:
+      - ./config:/app/config:ro

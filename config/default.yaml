@@ -1,0 +1,32 @@
+detector:
+  baseline_window: "7d"
+  eval_interval_seconds: 60
+  anomaly_threshold: 70
+  min_history_points: 12
+
+# Contribution of each signal family to the 0–100 incident score
+weights:
+  cpu: 35
+  memory: 25
+  error_rate: 25
+  latency: 10
+  restarts: 15
+  traffic: 10
+  deployment: 5
+  node_pressure: 20
+  oom: 30
+
+# How many standard deviations from the rolling baseline counts as anomalous
+sensitivity:
+  cpu: 3.0
+  memory: 3.0
+  error_rate: 2.5
+  latency: 2.5
+  restarts: 2.0
+  traffic: 3.0
+
+namespaces:
+  - default
+  - prod
+
+services: []  # empty = auto-discover from metric labels when possible

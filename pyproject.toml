@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k8s-anomaly-detection"
+version = "0.2.0"
+description = "Baseline and correlated anomaly detection for Kubernetes platforms"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "httpx>=0.27.0",
+  "pydantic>=2.9.0",
+  "pydantic-settings>=2.5.0",
+  "pyyaml>=6.0.2",
+  "numpy>=2.1.0",
+  "prometheus-client>=0.21.0",
+  "python-dateutil>=2.9.0",
+  "kubernetes>=31.0.0",
+  "rich>=13.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection"
+Repository = "https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection"
+Issues = "https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection/issues"
+Changelog = "https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection/releases"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0"]
+
+[project.scripts]
+anomaly-demo = "anomaly_detection.demo.run:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+anomaly_detection = ["static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]

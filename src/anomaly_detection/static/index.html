@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Kubernetes Anomaly Detection</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%2362f2be%22/><path d=%22M8 19l5-5 4 4 7-8%22 fill=%22none%22 stroke=%22%2307100f%22 stroke-width=%223%22/></svg>" />
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true"></span>
+        <div>
+          <h1>Kubernetes Anomaly Detection</h1>
+          <p id="status-line" class="muted">Connecting…</p>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="field">
+          <span>Cluster</span>
+          <select id="context-select" aria-label="Kubernetes context"></select>
+        </label>
+        <label class="field">
+          <span>Namespace</span>
+          <select id="namespace-select" aria-label="Namespace filter">
+            <option value="">All namespaces</option>
+            <option value="__workloads">Exclude system</option>
+          </select>
+        </label>
+        <label class="toggle"><input id="auto-refresh" type="checkbox" checked /> Auto 60s</label>
+        <div class="menu">
+          <button id="export-btn" class="ghost" type="button" aria-haspopup="true">Export</button>
+          <div id="export-menu" class="menu-list hidden">
+            <a id="export-md" href="#" target="_blank" rel="noopener">Markdown report</a>
+            <button id="export-json" type="button">JSON snapshot</button>
+          </div>
+        </div>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <div id="error-banner" class="banner hidden" role="alert"></div>
+
+    <main class="shell">
+      <section class="score-row" aria-label="Health scores">
+        <article class="card score-card">
+          <div class="ring" id="score-ring"><strong id="score-grade">–</strong><span id="score-value">–/100</span></div>
+          <div>
+            <p class="label">Cluster health</p>
+            <h2 id="score-headline">Analyzing…</h2>
+            <p id="score-summary" class="muted"></p>
+            <div id="coverage" class="chips"></div>
+          </div>
+        </article>
+        <div id="category-tiles" class="tiles"></div>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Capacity</p>
+            <h2>Usage vs requests vs limits</h2>
+            <p class="muted">Usage comes from the Metrics API. The scheduler only sees requests.</p>
+          </div>
+        </header>
+        <div id="capacity" class="capacity-grid"></div>
+        <ul id="capacity-notes" class="notes"></ul>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Prioritised</p>
+            <h2>Top actions</h2>
+          </div>
+        </header>
+        <ol id="quick-wins" class="wins"></ol>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Guidance</p>
+            <h2>Advisors</h2>
+            <p class="muted">Security posture, the Kubernetes upgrade path, and a root-cause note when something is failing. These are hypotheses from the snapshot; confirm them before changing the cluster.</p>
+          </div>
+        </header>
+        <div id="advisor-grid" class="advisor-grid"></div>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Findings</p>
+            <h2>Insights <span id="insight-count" class="count"></span></h2>
+          </div>
+          <div class="filters">
+            <div id="severity-filters" class="seg" role="group" aria-label="Severity">
+              <button data-severity="" class="active">All</button>
+              <button data-severity="critical">Critical</button>
+              <button data-severity="warning">Warning</button>
+              <button data-severity="info">Info</button>
+            </div>
+            <select id="category-filter" aria-label="Category">
+              <option value="">All categories</option>
+              <option value="reliability">Reliability</option>
+              <option value="capacity">Capacity</option>
+              <option value="efficiency">Efficiency</option>
+              <option value="security">Security</option>
+              <option value="configuration">Configuration</option>
+            </select>
+            <input id="search" type="search" placeholder="Search findings, namespaces, resources" />
+          </div>
+        </header>
+        <div id="insights" class="insights"></div>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div><p class="eyebrow">Infrastructure</p><h2>Nodes</h2></div>
+        </header>
+        <div class="table-wrap"><table id="nodes-table"></table></div>
+      </section>
+
+      <section class="grid-2">
+        <article class="card">
+          <header class="section-head">
+            <div><p class="eyebrow">Blast radius</p><h2>Namespaces</h2></div>
+          </header>
+          <div class="table-wrap tall"><table id="namespaces-table"></table></div>
+        </article>
+        <article class="card">
+          <header class="section-head">
+            <div><p class="eyebrow">Consumers</p><h2>Top pods by memory</h2></div>
+          </header>
+          <div class="table-wrap tall"><table id="pods-table"></table></div>
+        </article>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Signals</p>
+            <h2>Warning events</h2>
+            <p class="muted" id="events-caption"></p>
+          </div>
+        </header>
+        <div class="table-wrap tall"><table id="events-table"></table></div>
+      </section>
+
+      <section class="card">
+        <header class="section-head">
+          <div>
+            <p class="eyebrow">Time series</p>
+            <h2>Baseline anomalies</h2>
+            <p class="muted" id="baseline-status"></p>
+          </div>
+          <button id="evaluate" class="ghost" type="button">Run evaluation</button>
+        </header>
+        <div id="incidents" class="incidents"></div>
+      </section>
+    </main>
+
+    <footer class="shell footer">
+      <span>Read-only · Kubernetes API, Metrics API, optional Prometheus-compatible baselines</span>
+      <a href="/docs">API</a>
+    </footer>
+    <div id="toast" class="toast hidden" role="status"></div>
+    <script src="/assets/dashboard.js" defer></script>
+  </body>
+</html>

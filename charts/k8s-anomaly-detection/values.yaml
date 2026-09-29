@@ -1,0 +1,123 @@
+replicaCount: 1
+
+image:
+  # Published from this repo's Dockerfile to GitHub Container Registry.
+  repository: ghcr.io/rajamummidi9/kubernetes-anomaly-detection
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  automount: true
+
+rbac:
+  create: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # Put an authenticating proxy in front before exposing this. Example for ingress-nginx:
+    # nginx.ingress.kubernetes.io/auth-url: "https://oauth2.example.com/oauth2/auth"
+    # nginx.ingress.kubernetes.io/auth-signin: "https://oauth2.example.com/oauth2/start?rd=$escaped_request_uri"
+  hosts:
+    - host: anomaly.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Restrict who can open the dashboard. Egress stays open so the pod can reach the API server.
+networkPolicy:
+  enabled: false
+  ingressNamespaceSelectors: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Optional kubeconfig Secret (key: kubeconfig) for running outside the analyzed cluster.
+# Leave empty to use the in-cluster ServiceAccount, which is the right default.
+kubeconfig:
+  existingSecret: ""
+
+# Analysis settings. Empty prometheus URL disables the baseline detector.
+config:
+  prometheusUrl: ""
+  mimirUrl: ""
+  metricsBackend: prometheus
+  lokiUrl: ""
+  watchNamespaces: []
+  eventWindowHours: 6
+  systemNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - gatekeeper-system
+    - calico-system
+    - tigera-operator
+    - cert-manager
+    - ingress-nginx
+  nodeWarnPercent: 80
+  nodeCriticalPercent: 90
+  cacheTtlSeconds: 30
+  anomalyThreshold: 70
+  demoMode: false
+
+extraEnv: []
+
+# Detector weights mounted over /app/config/default.yaml. Queries stay in the image.
+detector:
+  baselineWindow: 7d
+  evalIntervalSeconds: 60
+  minHistoryPoints: 12
+  weights:
+    cpu: 35
+    memory: 25
+    errorRate: 25
+    latency: 10
+    restarts: 15
+    traffic: 10
+    deployment: 5
+    nodePressure: 20
+    oom: 30
+  sensitivity:
+    cpu: 3.0
+    memory: 3.0
+    errorRate: 2.5
+    latency: 2.5
+    restarts: 2.0
+    traffic: 3.0

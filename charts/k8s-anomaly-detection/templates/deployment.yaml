@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "anomaly.fullname" . }}
+  labels:
+    {{- include "anomaly.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "anomaly.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "anomaly.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "anomaly.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: engine
+          image: {{ include "anomaly.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          env:
+            - name: DEMO_MODE
+              value: {{ .Values.config.demoMode | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.config.prometheusUrl | quote }}
+            - name: MIMIR_URL
+              value: {{ .Values.config.mimirUrl | quote }}
+            - name: METRICS_BACKEND
+              value: {{ .Values.config.metricsBackend | quote }}
+            - name: LOKI_URL
+              value: {{ .Values.config.lokiUrl | quote }}
+            - name: WATCH_NAMESPACES
+              value: {{ join "," .Values.config.watchNamespaces | quote }}
+            - name: EVENT_WINDOW_HOURS
+              value: {{ .Values.config.eventWindowHours | quote }}
+            - name: SYSTEM_NAMESPACES
+              value: {{ join "," .Values.config.systemNamespaces | quote }}
+            - name: NODE_WARN_PERCENT
+              value: {{ .Values.config.nodeWarnPercent | quote }}
+            - name: NODE_CRITICAL_PERCENT
+              value: {{ .Values.config.nodeCriticalPercent | quote }}
+            - name: CACHE_TTL_SECONDS
+              value: {{ .Values.config.cacheTtlSeconds | quote }}
+            - name: ANOMALY_THRESHOLD
+              value: {{ .Values.config.anomalyThreshold | quote }}
+            {{- if .Values.kubeconfig.existingSecret }}
+            - name: KUBECONFIG
+              value: /var/run/kube/kubeconfig
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/default.yaml
+              subPath: default.yaml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.kubeconfig.existingSecret }}
+            - name: kubeconfig
+              mountPath: /var/run/kube
+              readOnly: true
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "anomaly.fullname" . }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.kubeconfig.existingSecret }}
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.kubeconfig.existingSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

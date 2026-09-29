@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: anomaly-engine
+  namespace: anomaly-detection
+  labels:
+    app: anomaly-engine
+spec:
+  selector:
+    app: anomaly-engine
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

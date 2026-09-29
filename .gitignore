@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets / local
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+
+# Local browser tooling
+.playwright-mcp/
+
+# Runtime
+data/*.db
+data/*.sqlite
+*.log
+.cache/

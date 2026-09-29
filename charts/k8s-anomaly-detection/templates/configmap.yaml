@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "anomaly.fullname" . }}
+  labels:
+    {{- include "anomaly.labels" . | nindent 4 }}
+data:
+  default.yaml: |
+    detector:
+      baseline_window: {{ .Values.detector.baselineWindow | quote }}
+      eval_interval_seconds: {{ .Values.detector.evalIntervalSeconds }}
+      anomaly_threshold: {{ .Values.config.anomalyThreshold }}
+      min_history_points: {{ .Values.detector.minHistoryPoints }}
+    weights:
+      cpu: {{ .Values.detector.weights.cpu }}
+      memory: {{ .Values.detector.weights.memory }}
+      error_rate: {{ .Values.detector.weights.errorRate }}
+      latency: {{ .Values.detector.weights.latency }}
+      restarts: {{ .Values.detector.weights.restarts }}
+      traffic: {{ .Values.detector.weights.traffic }}
+      deployment: {{ .Values.detector.weights.deployment }}
+      node_pressure: {{ .Values.detector.weights.nodePressure }}
+      oom: {{ .Values.detector.weights.oom }}
+    sensitivity:
+      cpu: {{ .Values.detector.sensitivity.cpu }}
+      memory: {{ .Values.detector.sensitivity.memory }}
+      error_rate: {{ .Values.detector.sensitivity.errorRate }}
+      latency: {{ .Values.detector.sensitivity.latency }}
+      restarts: {{ .Values.detector.sensitivity.restarts }}
+      traffic: {{ .Values.detector.sensitivity.traffic }}

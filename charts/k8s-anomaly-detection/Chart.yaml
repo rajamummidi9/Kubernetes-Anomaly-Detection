@@ -1,0 +1,21 @@
+apiVersion: v2
+name: k8s-anomaly-detection
+description: Read-only health, security, upgrade, and incident analysis for any Kubernetes cluster
+type: application
+home: https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection
+sources:
+  - https://github.com/rajamummidi9/Kubernetes-Anomaly-Detection
+version: 0.2.0
+appVersion: "0.2.0"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - kubernetes
+  - anomaly-detection
+  - security
+  - sre
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/recommendations: |
+    - Keep the Service on the cluster network. The dashboard lists workloads, events, and security gaps.
+    - Use the in-cluster ServiceAccount. Do not mount a kubeconfig with write access.

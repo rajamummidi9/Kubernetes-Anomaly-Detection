@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-engine-config
+  namespace: anomaly-detection
+data:
+  default.yaml: |
+    detector:
+      baseline_window: "7d"
+      eval_interval_seconds: 60
+      anomaly_threshold: 70
+      min_history_points: 12
+    weights:
+      cpu: 35
+      memory: 25
+      error_rate: 25
+      latency: 10
+      restarts: 15
+      traffic: 10
+      deployment: 5
+      node_pressure: 20
+      oom: 30
+    sensitivity:
+      cpu: 3.0
+      memory: 3.0
+      error_rate: 2.5
+      latency: 2.5
+      restarts: 2.0
+      traffic: 3.0
+    namespaces:
+      - default
+      - prod

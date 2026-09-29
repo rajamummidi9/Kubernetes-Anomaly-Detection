@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import AsyncIterator
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, PlainTextResponse
+
+from anomaly_detection import __version__
+from anomaly_detection.config import get_settings
+from anomaly_detection.engine import AnomalyEngine
+from anomaly_detection.insights.report import ClusterAnalyzer, to_markdown
+from anomaly_detection.models import EvaluationResult, Incident
+
+settings = get_settings()
+engine = AnomalyEngine(settings)
+analyzer = ClusterAnalyzer(settings, ttl_seconds=settings.cache_ttl_seconds)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await engine.evaluate()
+    yield
+    await engine.aclose()
+
+
+app = FastAPI(
+    title="Kubernetes Anomaly Detection",
+    version=__version__,
+    description="Read-only cluster insights plus baseline anomaly scoring for any Kubernetes cluster.",
+    lifespan=lifespan,
+)
+
+
+@app.get("/", include_in_schema=False)
+async def dashboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/assets/{name}", include_in_schema=False)
+async def asset(name: str) -> FileResponse:
+    media = {"dashboard.css": "text/css", "dashboard.js": "application/javascript"}
+    if name not in media:
+        raise HTTPException(status_code=404)
+    return FileResponse(STATIC_DIR / name, media_type=media[name])
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {
+        "status": "ok",
+        "version": __version__,
+        "demo_mode": settings.demo_mode,
+        "baseline": engine.status,
+    }
+
+
+@app.get("/v1/contexts")
+async def contexts() -> dict:
+    items, default = await asyncio.to_thread(analyzer.clients.contexts)
+    return {
+        "default": default,
+        "contexts": [{"name": c.name, "cluster": c.cluster, "user": c.user} for c in items],
+    }
+
+
+@app.get("/v1/analysis")
+async def analysis(context: str | None = None, force: bool = False) -> dict:
+    """Full read-only analysis of one cluster context."""
+    return await asyncio.to_thread(analyzer.analyze, context, force)
+
+
+@app.get("/v1/report.md", response_class=PlainTextResponse)
+async def report_markdown(context: str | None = None) -> str:
+    report = await asyncio.to_thread(analyzer.analyze, context, False)
+    if not report["meta"].get("connected"):
+        raise HTTPException(status_code=502, detail=report["meta"].get("error"))
+    return to_markdown(report)
+
+
+@app.get("/v1/dashboard")
+async def dashboard(context: str | None = None, force: bool = False) -> dict:
+    """Cluster analysis plus Prometheus baseline incidents in one call."""
+    report = await asyncio.to_thread(analyzer.analyze, context, force)
+    latest = engine.latest
+    return {
+        "cluster": report,
+        "baseline": {
+            "status": engine.status,
+            "enabled": engine.enabled,
+            "result": latest.model_dump(mode="json") if latest else None,
+        },
+        "version": __version__,
+    }
+
+
+@app.post("/v1/evaluate", response_model=EvaluationResult)
+async def evaluate() -> EvaluationResult:
+    return await engine.evaluate()
+
+
+@app.get("/v1/anomalies")
+async def list_anomalies(min_contribution: float = Query(0.0, ge=0.0)):
+    latest = engine.latest or await engine.evaluate()
+    items = [a for a in latest.anomalies if a.contribution >= min_contribution]
+    return {"count": len(items), "anomalies": items}
+
+
+@app.get("/v1/incidents")
+async def list_incidents(min_score: float = Query(0.0, ge=0.0, le=100.0)):
+    incidents = [i for i in engine.list_incidents() if i.score >= min_score]
+    return {"count": len(incidents), "incidents": incidents}
+
+
+@app.get("/v1/incidents/{incident_id}", response_model=Incident)
+async def get_incident(incident_id: str) -> Incident:
+    incident = engine.get_incident(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return incident
